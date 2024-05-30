@@ -1,6 +1,6 @@
 [package]
 name = "direct_ring_buffer"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 authors = ["Seiji Ainoguchi <seiji.ainoguchi@gmail.com>"]
 description = "A high-performance, lock-free ring buffer for single-producer, single-consumer scenarios."
