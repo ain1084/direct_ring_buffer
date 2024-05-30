@@ -1,10 +1,11 @@
 # Direct Ring Buffer
 
-This crate provides a high-performance, lock-free ring buffer for single-producer, single-consumer scenarios. The main components of this crate are the `Producer` and `Consumer` structures, which allow for efficient data writing and reading, respectively.
-
 [![Crates.io](https://img.shields.io/crates/v/direct_ring_buffer.svg)](https://crates.io/crates/direct_ring_buffer)
 [![Documentation](https://docs.rs/direct_ring_buffer/badge.svg)](https://docs.rs/direct_ring_buffer)
-[![Build Status](https://github.com/ain1084/direct_ring_buffer/workflows/Build/badge.svg)](https://github.com/ain1084/direct_ring_buffer/actions?query=workflow%3ABuild)
+![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/ain1084/direct_ring_buffer/rust.yml)
+![Crates.io License](https://img.shields.io/crates/l/direct_ring_buffer)
+
+This crate provides a high-performance, lock-free ring buffer for single-producer, single-consumer scenarios. The main components of this crate are the `Producer` and `Consumer` structures, which allow for efficient data writing and reading, respectively.
 
 ## Overview
 
