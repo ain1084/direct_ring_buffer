@@ -8,7 +8,7 @@ homepage = "https://github.com/ain1084/direct_ring_buffer"
 repository = "https://github.com/ain1084/direct_ring_buffer"
 documentation = "https://docs.rs/direct_ring_buffer"
 readme = "README.md"
-keywords = ["ring buffer", "lock-free", "single-producer", "single-consumer"]
+keywords = ["ring-buffer", "lock-free", "spsc"]
 categories = ["data-structures", "concurrency"]
 license = "MIT OR Apache-2.0"
 
