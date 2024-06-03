@@ -9,20 +9,20 @@ mod tests {
         let (p, mut c) = create_ring_buffer::<u8>(10);
         assert_eq!(p.available(), 10);
         assert_eq!(c.available(), 0);
-        assert_eq!(c.read(|data, _offset| data.len(), None), 0);
+        assert_eq!(c.read_slices(|data, _offset| data.len(), None), 0);
     }
 
     #[test]
     fn test_empty_read() {
         let (_p, mut c) = create_ring_buffer::<u8>(10);
-        assert_eq!(c.read(|_, _| 0, None), 0);
+        assert_eq!(c.read_slices(|_, _| 0, None), 0);
     }
 
     #[test]
     fn test_full() {
         let (mut p, c) = create_ring_buffer::<u8>(10);
         assert_eq!(
-            p.write(
+            p.write_slices(
                 |data, _offset| {
                     data.iter_mut().enumerate().for_each(|(d, v)| *v = d as u8);
                     10
@@ -33,25 +33,75 @@ mod tests {
         );
         assert_eq!(p.available(), 0);
         assert_eq!(c.available(), 10);
-        assert_eq!(p.write(|_data, _offset| 0, None), 0);
+        assert_eq!(p.write_slices(|_data, _offset| 0, None), 0);
     }
 
     #[test]
     fn test_full_write_and_read() {
         let (mut p, mut c) = create_ring_buffer::<u8>(10);
-        assert_eq!(p.write(|data, _offset| data.len(), None), 10);
+        assert_eq!(p.write_slices(|data, _offset| data.len(), None), 10);
         assert_eq!(p.available(), 0);
         assert_eq!(c.available(), 10);
-        assert_eq!(c.read(|data, _offset| data.len(), None), 10);
+        assert_eq!(c.read_slices(|data, _offset| data.len(), None), 10);
         assert_eq!(p.available(), 10);
         assert_eq!(c.available(), 0);
+    }
+
+    #[test]
+    fn test_element_write() {
+        let (mut p, _) = create_ring_buffer::<u8>(5);
+        assert!(p.write_element(0));
+        assert!(p.write_element(1));
+        assert!(p.write_element(2));
+        assert!(p.write_element(3));
+        assert!(p.write_element(4));
+        assert!(!p.write_element(5));
+    }
+
+    #[test]
+    fn test_element_read() {
+        let (mut p, mut c) = create_ring_buffer::<u8>(5);
+        assert!(p.write_element(0));
+        assert!(p.write_element(1));
+        assert!(p.write_element(2));
+        assert!(p.write_element(3));
+        assert!(p.write_element(4));
+        assert!(!p.write_element(5));
+        assert_eq!(c.read_element(), Some(0));
+        assert_eq!(c.read_element(), Some(1));
+        assert_eq!(c.read_element(), Some(2));
+        assert_eq!(c.read_element(), Some(3));
+        assert_eq!(c.read_element(), Some(4));
+        assert_eq!(c.read_element(), None);
+    }
+
+    #[test]
+    fn test_element_read_write() {
+        let (mut p, mut c) = create_ring_buffer::<u8>(5);
+        assert!(p.write_element(0));
+        assert_eq!(c.read_element(), Some(0));
+        assert!(p.write_element(1));
+        assert!(p.write_element(2));
+        assert_eq!(c.read_element(), Some(1));
+        assert!(p.write_element(3));
+        assert!(p.write_element(4));
+        assert_eq!(c.read_element(), Some(2));
+        assert!(p.write_element(5));
+        assert_eq!(c.read_element(), Some(3));
+        assert!(p.write_element(6));
+        assert_eq!(c.read_element(), Some(4));
+        assert!(p.write_element(7));
+        assert_eq!(c.read_element(), Some(5));
+        assert_eq!(c.read_element(), Some(6));
+        assert_eq!(c.read_element(), Some(7));
+        assert_eq!(c.read_element(), None);
     }
 
     #[test]
     fn test_write_max_size() {
         let (mut p, mut c) = create_ring_buffer::<u8>(10);
         assert_eq!(
-            p.write(
+            p.write_slices(
                 |data, offset| {
                     assert_eq!(offset, 0);
                     assert_eq!(data.len(), 5);
@@ -65,7 +115,7 @@ mod tests {
         assert_eq!(p.available(), 5);
         assert_eq!(c.available(), 5);
         assert_eq!(
-            c.read(
+            c.read_slices(
                 |data, offset| {
                     assert_eq!(offset, 0);
                     assert_eq!(data.len(), 5);
@@ -81,10 +131,10 @@ mod tests {
     #[test]
     fn test_read_max_size() {
         let (mut p, mut c) = create_ring_buffer::<u8>(10);
-        assert_eq!(p.write(|data, _offset| data.len(), None), 10);
+        assert_eq!(p.write_slices(|data, _offset| data.len(), None), 10);
         assert_eq!(p.available(), 0);
         assert_eq!(c.available(), 10);
-        assert_eq!(c.read(|data, _offset| data.len(), Some(3)), 3);
+        assert_eq!(c.read_slices(|data, _offset| data.len(), Some(3)), 3);
         assert_eq!(p.available(), 3);
         assert_eq!(c.available(), 7);
     }
@@ -93,7 +143,7 @@ mod tests {
     fn test_wraparound() {
         let (mut p, mut c) = create_ring_buffer::<u8>(10);
         assert_eq!(
-            p.write(
+            p.write_slices(
                 |data, offset| {
                     assert_eq!(data.len(), 5);
                     assert_eq!(offset, 0);
@@ -105,7 +155,7 @@ mod tests {
             5
         );
         assert_eq!(
-            c.read(
+            c.read_slices(
                 |data, _offset| {
                     assert_eq!(data, &[10, 20, 30]);
                     data.len()
@@ -115,7 +165,7 @@ mod tests {
             3
         );
         assert_eq!(
-            p.write(
+            p.write_slices(
                 |data, offset| {
                     if offset == 0 {
                         assert_eq!(data.len(), 5);
@@ -132,7 +182,7 @@ mod tests {
             8,
         );
         assert_eq!(
-            c.read(
+            c.read_slices(
                 |data, offset| {
                     if offset == 0 {
                         assert_eq!(data.len(), 7);
@@ -164,7 +214,7 @@ mod tests {
         assert_eq!(c.available(), 0);
 
         assert_eq!(
-            p.write(
+            p.write_slices(
                 |data, _| {
                     data[0] = 42;
                     1
@@ -178,7 +228,7 @@ mod tests {
         assert_eq!(c.available(), 1);
 
         assert_eq!(
-            c.read(
+            c.read_slices(
                 |data, _| {
                     assert_eq!(data[0], 42);
                     1
@@ -196,7 +246,7 @@ mod tests {
     fn test_write_break() {
         let (mut p, mut c) = create_ring_buffer::<u8>(10);
         assert_eq!(
-            p.write(
+            p.write_slices(
                 |data, offset| {
                     assert_eq!(data.len(), 10);
                     assert_eq!(offset, 0);
@@ -208,7 +258,7 @@ mod tests {
             5
         );
         assert_eq!(
-            p.write(
+            p.write_slices(
                 |data, offset| {
                     assert_eq!(data.len(), 5);
                     assert_eq!(offset, 0);
@@ -220,7 +270,7 @@ mod tests {
             5
         );
         assert_eq!(
-            c.read(
+            c.read_slices(
                 |data, offset| {
                     assert_eq!(offset, 0);
                     assert_eq!(data.len(), 10);
@@ -237,7 +287,7 @@ mod tests {
     fn test_read_break() {
         let (mut p, mut c) = create_ring_buffer::<u8>(10);
         assert_eq!(
-            p.write(
+            p.write_slices(
                 |data, offset| {
                     assert_eq!(offset, 0);
                     assert_eq!(data.len(), 10);
@@ -249,7 +299,7 @@ mod tests {
             10
         );
         assert_eq!(
-            c.read(
+            c.read_slices(
                 |data, offset| {
                     assert_eq!(offset, 0);
                     assert_eq!(data.len(), 10);
@@ -261,7 +311,7 @@ mod tests {
             5
         );
         assert_eq!(
-            c.read(
+            c.read_slices(
                 |data, offset| {
                     assert_eq!(offset, 0);
                     assert_eq!(data.len(), 5);
@@ -275,12 +325,12 @@ mod tests {
     }
 
     #[test]
-    fn test_read_write() {
+    fn test_slices_read_write() {
         let (mut p, mut c) = create_ring_buffer::<u8>(10);
 
         fn read_array<T: Copy>(consumer: &mut Consumer<T>, max_len: usize) -> Vec<T> {
             let mut vec = Vec::<T>::new();
-            consumer.read(
+            consumer.read_slices(
                 |w, _offset| {
                     vec.extend_from_slice(w);
                     w.len()
@@ -291,7 +341,7 @@ mod tests {
         }
 
         fn write_array<T: Copy>(producer: &mut Producer<T>, buf: &[T]) -> usize {
-            producer.write(
+            producer.write_slices(
                 |dest, offset| {
                     dest.copy_from_slice(&buf[offset..offset + dest.len()]);
                     dest.len()
@@ -356,7 +406,35 @@ mod tests {
     }
 
     #[test]
-    fn test_concurrent_read_write() {
+    fn test_concurrent_element_read_write() {
+        const TEST_COUNT: usize = 500_000;
+        let (mut p, mut c) = create_ring_buffer::<usize>(10000);
+        let p = thread::spawn(move || {
+            for write_value in 0..TEST_COUNT {
+                while !p.write_element(write_value) {
+                    std::thread::sleep(std::time::Duration::from_millis(1))
+                }
+            }
+        });
+
+        let c = thread::spawn(move || {
+            for read_value in 0..TEST_COUNT {
+                let rv = loop {
+                    if let Some(rv) = c.read_element() {
+                        break rv;
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(1))
+                };
+                assert_eq!(rv, read_value);
+            }
+        });
+
+        let _ = p.join();
+        let _ = c.join();
+    }
+
+    #[test]
+    fn test_concurrent_slices_read_write() {
         let (mut p, mut c) = create_ring_buffer::<usize>(44100);
         const TEST_LIMIT: usize = 50_000_000;
         const UNIT_MAX: usize = 51;
@@ -366,7 +444,7 @@ mod tests {
             let mut rng = rand::thread_rng();
             while write_value != TEST_LIMIT {
                 let unit = std::cmp::min(rng.gen_range(1..UNIT_MAX + 1), TEST_LIMIT - write_value);
-                let _ = p.write(
+                let _ = p.write_slices(
                     |buf: &mut [usize], _offset| {
                         buf.iter_mut().for_each(|value| {
                             *value = write_value;
@@ -384,7 +462,7 @@ mod tests {
             let mut rng = rand::thread_rng();
             while read_value != TEST_LIMIT {
                 let unit = std::cmp::min(rng.gen_range(1..UNIT_MAX + 1), TEST_LIMIT - read_value);
-                let _ = c.read(
+                let _ = c.read_slices(
                     |buf, _offset| {
                         buf.iter().for_each(|value| {
                             assert_eq!(*value, read_value);
