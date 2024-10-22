@@ -325,6 +325,68 @@ mod tests {
     }
 
     #[test]
+    fn test_readme_example() {
+        let (mut producer, mut consumer) = create_ring_buffer::<u8>(5);
+        
+        // Write data to the buffer in slices
+        producer.write_slices(|data, _offset| {
+            data[..3].copy_from_slice(&[1, 2, 3]);
+            3
+        }, None);
+
+        producer.write_slices(|data, _offset| {
+            data[..1].copy_from_slice(&[4]);
+            1
+        }, None);
+
+        // Read the data
+        consumer.read_slices(|data, _offset| {
+            assert_eq!(&data[..4], &[1, 2, 3, 4]);
+            4
+        }, None);
+
+        // Test wrap-around by writing more data
+        producer.write_slices(|data, offset| {
+            if offset == 0 {
+                data[..1].copy_from_slice(&[6]);
+                1
+            } else if offset == 1 {
+                data[..1].copy_from_slice(&[7]);
+                1
+            } else {
+                panic!("Unexpected offset: {}", offset);
+            }
+        }, None);
+
+        // Verify the wrap-around data
+        consumer.read_slices(|data, offset| {
+            if offset == 0 {
+                assert_eq!(data, &[6]);  // Read the last part of the buffer
+            } else if offset == 1 {
+                assert_eq!(data, &[7]);  // Read the wrapped-around part
+            } else {
+                panic!("Unexpected offset: {}", offset);  // Ensure only 0 or 1 is valid
+            }
+            data.len()
+        }, None);
+
+        // Write 5 more values to test wrap-around in one go
+        let test_data = [8, 9, 10, 11, 12];
+        producer.write_slices(|data, offset| {
+            let write_len = data.len().min(test_data.len() - offset);
+            data[..write_len].copy_from_slice(&test_data[offset..offset + write_len]);
+            write_len
+        }, None);
+
+        // Read the newly written values to verify wrap-around
+        consumer.read_slices(|data, offset| {
+            let read_len = data.len().min(test_data.len() - offset);
+            assert_eq!(&data[..read_len], &test_data[offset..offset + read_len]);
+            read_len
+        }, None);
+    }
+
+    #[test]
     fn test_slices_read_write() {
         let (mut p, mut c) = create_ring_buffer::<u8>(10);
 
