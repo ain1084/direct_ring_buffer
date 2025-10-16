@@ -1,4 +1,10 @@
 #[cfg(test)]
+#[cfg(miri)]
+const CONCURRENT_TEST_COUNT: usize = 50;
+
+#[cfg(not(miri))]
+const CONCURRENT_TEST_COUNT: usize = 50_000;
+
 mod tests {
     use direct_ring_buffer::{create_ring_buffer, Consumer, Producer};
     use rand::Rng;
@@ -6,6 +12,8 @@ mod tests {
         Arc,
         Mutex
      }, thread::{self, JoinHandle}};
+
+    use crate::CONCURRENT_TEST_COUNT;
 
     #[test]
     fn test_empty() {
@@ -478,7 +486,7 @@ mod tests {
 
     #[test]
     fn test_concurrent_element_read_write() {
-        const TEST_COUNT: usize = 500_000;
+        const TEST_COUNT: usize = CONCURRENT_TEST_COUNT;
         let (mut p, mut c) = create_ring_buffer::<usize>(10000);
         let p = thread::spawn(move || {
             for write_value in 0..TEST_COUNT {
@@ -507,15 +515,15 @@ mod tests {
     #[test]
     fn test_concurrent_slices_read_write() {
         let (p, c) = create_ring_buffer::<usize>(44100);
-        const TEST_LIMIT: usize = 50_000_000;
+        const TEST_COUNT: usize = CONCURRENT_TEST_COUNT;
         const UNIT_MAX: usize = 51;
 
         fn make_test_thread<F: FnMut(&mut usize, usize) + Send + 'static>(mut f: F) -> JoinHandle<()> {
             let mut count_value = 0usize;
             thread::spawn(move || {
                 let mut rng = rand::rng();
-                while count_value != TEST_LIMIT {
-                    let unit = std::cmp::min(rng.random_range(1..UNIT_MAX + 1), TEST_LIMIT - count_value);
+                while count_value != TEST_COUNT {
+                    let unit = std::cmp::min(rng.random_range(1..UNIT_MAX + 1), TEST_COUNT - count_value);
                     f(&mut count_value, unit);
                 }
             })
