@@ -2,7 +2,10 @@
 mod tests {
     use direct_ring_buffer::{create_ring_buffer, Consumer, Producer};
     use rand::Rng;
-    use std::thread;
+    use std::{sync::{
+        Arc,
+        Mutex
+     }, thread::{self, JoinHandle}};
 
     #[test]
     fn test_empty() {
@@ -10,6 +13,12 @@ mod tests {
         assert_eq!(p.available(), 10);
         assert_eq!(c.available(), 0);
         assert_eq!(c.read_slices(|data, _offset| data.len(), None), 0);
+    }
+
+    #[test]
+    fn test_empty_write() {
+        let (mut p, _c) = create_ring_buffer::<u8>(10);
+        assert_eq!(p.write_slices(|_, _| 0, None), 0);
     }
 
     #[test]
@@ -497,47 +506,55 @@ mod tests {
 
     #[test]
     fn test_concurrent_slices_read_write() {
-        let (mut p, mut c) = create_ring_buffer::<usize>(44100);
+        let (p, c) = create_ring_buffer::<usize>(44100);
         const TEST_LIMIT: usize = 50_000_000;
         const UNIT_MAX: usize = 51;
 
-        let mut write_value = 0usize;
-        let p = thread::spawn(move || {
-            let mut rng = rand::thread_rng();
-            while write_value != TEST_LIMIT {
-                let unit = std::cmp::min(rng.gen_range(1..UNIT_MAX + 1), TEST_LIMIT - write_value);
-                let _ = p.write_slices(
-                    |buf: &mut [usize], _offset| {
-                        buf.iter_mut().for_each(|value| {
-                            *value = write_value;
-                            write_value += 1;
-                        });
-                        buf.len()
-                    },
-                    Some(unit),
-                );
-            }
+        fn make_test_thread<F: FnMut(&mut usize, usize) + Send + 'static>(mut f: F) -> JoinHandle<()> {
+            let mut count_value = 0usize;
+            thread::spawn(move || {
+                let mut rng = rand::rng();
+                while count_value != TEST_LIMIT {
+                    let unit = std::cmp::min(rng.random_range(1..UNIT_MAX + 1), TEST_LIMIT - count_value);
+                    f(&mut count_value, unit);
+                }
+            })
+        }
+
+        let p = Arc::new(Mutex::new(p));
+        let p1 = p.clone();
+        let writer = make_test_thread(move |write_value, unit| {
+            p1.lock().unwrap().write_slices(
+                |buf, _offset| {
+                    let write_len = buf.len().min(unit);
+                    buf[..write_len].iter_mut().for_each(|value| {
+                        *value = *write_value;
+                        *write_value += 1;
+                    });
+                    write_len
+                },
+                Some(unit),
+            );
         });
 
-        let mut read_value = 0usize;
-        let c = thread::spawn(move || {
-            let mut rng = rand::thread_rng();
-            while read_value != TEST_LIMIT {
-                let unit = std::cmp::min(rng.gen_range(1..UNIT_MAX + 1), TEST_LIMIT - read_value);
-                let _ = c.read_slices(
-                    |buf, _offset| {
-                        buf.iter().for_each(|value| {
-                            assert_eq!(*value, read_value);
-                            read_value += 1;
-                        });
-                        buf.len()
-                    },
-                    Some(unit),
-                );
-            }
-            assert_eq!(c.available(), 0);
+        let c = Arc::new(Mutex::new(c));
+        let c1 = c.clone();
+        let reader = make_test_thread(move |read_value, unit| {
+            c1.lock().unwrap().read_slices(
+                |buf, _offset| {
+                    let read_len = buf.len().min(unit);
+                    buf[..read_len].iter().for_each(|value| {
+                        assert_eq!(*value, *read_value);
+                        *read_value += 1;
+                    });
+                    read_len
+                },
+                Some(unit),
+            );
         });
-        let _ = p.join();
-        let _ = c.join();
+        let _ = writer.join();
+        let _ = reader.join();
+        assert_eq!(c.lock().unwrap().available(), 0);
+        assert_eq!(p.lock().unwrap().available(), 44100);
     }
 }

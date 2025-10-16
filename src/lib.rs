@@ -51,17 +51,17 @@ impl<T> Producer<T> {
     /// # Arguments
     ///
     /// * `f` - A closure for writing elements. It takes a mutable slice of writable
-    ///         elements and an offset, and returns the number of elements written. The
-    ///         closure will not be called if there are no writable elements. If the
-    ///         buffer wraps around, the closure may be called twice. The slice passed
-    ///         to the closure contains the currently writable elements. The offset is
-    ///         `0` for the first call and increases by the number of elements written
-    ///         in subsequent calls. If the closure returns a value less than the
-    ///         length of the slice passed to it, it is considered as an interruption
-    ///         of the write operation by that number of elements.
+    ///   elements and an offset, and returns the number of elements written. The
+    ///   closure will not be called if there are no writable elements. If the
+    ///   buffer wraps around, the closure may be called twice. The slice passed
+    ///   to the closure contains the currently writable elements. The offset is
+    ///   `0` for the first call and increases by the number of elements written
+    ///   in subsequent calls. If the closure returns a value less than the
+    ///   length of the slice passed to it, it is considered as an interruption
+    ///   of the write operation by that number of elements.
     /// * `max_size` - An optional parameter specifying the maximum number of elements
-    ///                to write. If `None`, the method will write up to the number of
-    ///                available elements.
+    ///   to write. If `None`, the method will write up to the number of
+    ///   available elements.
     ///
     /// # Returns
     ///
@@ -209,18 +209,18 @@ impl<T> Consumer<T> {
     /// # Arguments
     ///
     /// * `f` - A closure that processes the readable elements. It takes a reference
-    ///         to a slice of readable elements and an offset as arguments, and
-    ///         returns the number of elements read. The closure will not be called if
-    ///         there are no readable elements. If the buffer wraps around, the closure
-    ///         may be called twice. The slice passed to the closure contains the
-    ///         currently accessible elements. The offset is `0` for the first call
-    ///         and increases by the number of elements read in subsequent calls. If
-    ///         the closure returns a value less than the length of the slice passed to
-    ///         it, it is considered as an interruption of the read operation by that
-    ///         number of elements.
+    ///   to a slice of readable elements and an offset as arguments, and
+    ///   returns the number of elements read. The closure will not be called if
+    ///   there are no readable elements. If the buffer wraps around, the closure
+    ///   may be called twice. The slice passed to the closure contains the
+    ///   currently accessible elements. The offset is `0` for the first call
+    ///   and increases by the number of elements read in subsequent calls. If
+    ///   the closure returns a value less than the length of the slice passed to
+    ///   it, it is considered as an interruption of the read operation by that
+    ///   number of elements.
     /// * `max_size` - An optional parameter specifying the maximum number of elements
-    ///                to read. If `None`, the method will read up to the number of
-    ///                available elements.
+    ///   to read. If `None`, the method will read up to the number of
+    ///   available elements.
     ///
     /// # Returns
     ///
