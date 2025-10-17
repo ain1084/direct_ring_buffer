@@ -1,30 +1,65 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{criterion_group, criterion_main, Criterion, BatchSize, Throughput};
+use std::hint::black_box;
 use direct_ring_buffer::create_ring_buffer;
 
+fn bench_write<T: Copy + Default + 'static>(c: &mut Criterion) {
+    const N: usize = 1_000_000;
+    let mut g = c.benchmark_group(format!("write_element::<{}>", std::any::type_name::<T>()));
+    g.throughput(Throughput::Bytes((N * size_of::<T>()) as u64));
 
-fn bench_elements<T: Copy + Default>(c: &mut Criterion) {
-    let type_name = std::any::type_name::<T>();
-    const BUFFER_SIZE: usize = 100_000_000;
-    let (mut producer, mut consumer) = create_ring_buffer::<T>(BUFFER_SIZE);
-
-    // Fill the buffer with data
-    c.bench_function(&format!("write_element({type_name}) ({BUFFER_SIZE} elements)"), |b| {
-        b.iter(|| {
-            for _ in 0..BUFFER_SIZE {
-                black_box(producer.write_element(T::default()));
-            }
-        });
+    g.bench_function("cold_empty_buffer", |b| {
+        b.iter_batched(
+            || create_ring_buffer::<T>(N),
+            |(mut p, _c)| {
+                for _ in 0..N {
+                    let ok = p.write_element(T::default());
+                    debug_assert!(ok);
+                }
+            },
+            BatchSize::LargeInput,
+        );
     });
 
-    c.bench_function(&format!("read_element({type_name}) ({BUFFER_SIZE} elements)"), |b| {
-        b.iter(|| {
-            // Read elements from the buffer
-            for _ in 0..BUFFER_SIZE {
-                black_box(consumer.read_element());
-            }
-        });
-    });
+    g.finish();
 }
 
-criterion_group!(bench_group_elements, bench_elements::<u8>, bench_elements::<u16>, bench_elements::<u32>, bench_elements::<usize>);
-criterion_main!(bench_group_elements);
+
+fn bench_read<T: Copy + Default + 'static>(c: &mut Criterion) {
+    const N: usize = 1_000_000;
+    let mut g = c.benchmark_group(format!("read_element::<{}>", std::any::type_name::<T>()));
+    g.throughput(Throughput::Bytes((N * size_of::<T>()) as u64));
+
+    g.bench_function("full_buffer", |b| {
+        b.iter_batched(
+            || {
+                let (mut p, c) = create_ring_buffer::<T>(N);
+                for _ in 0..N {
+                    let _ = p.write_element(T::default());
+                }
+                c
+            },
+            |mut c| {
+                for _ in 0..N {
+                    black_box(c.read_element().unwrap());
+                }
+            },
+            BatchSize::LargeInput,
+        );
+    });
+
+    g.finish();
+}
+
+fn bench_elements<T: Copy + Default + 'static>(c: &mut Criterion) {
+    bench_write::<T>(c);
+    bench_read::<T>(c);
+}
+
+criterion_group!(
+    benches,
+    bench_elements::<u8>,
+    bench_elements::<u16>,
+    bench_elements::<u32>,
+    bench_elements::<usize>
+);
+criterion_main!(benches);

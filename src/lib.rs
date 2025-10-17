@@ -1,12 +1,10 @@
 #![doc = include_str!("../README.md")]
 
 use std::{
-    cell::UnsafeCell,
-    slice::{from_raw_parts, from_raw_parts_mut},
-    sync::{
+    ptr::NonNull, slice::{from_raw_parts, from_raw_parts_mut}, sync::{
         atomic::{AtomicUsize, Ordering},
         Arc,
-    },
+    }
 };
 
 /// Producer part of the ring buffer.
@@ -51,17 +49,17 @@ impl<T> Producer<T> {
     /// # Arguments
     ///
     /// * `f` - A closure for writing elements. It takes a mutable slice of writable
-    ///         elements and an offset, and returns the number of elements written. The
-    ///         closure will not be called if there are no writable elements. If the
-    ///         buffer wraps around, the closure may be called twice. The slice passed
-    ///         to the closure contains the currently writable elements. The offset is
-    ///         `0` for the first call and increases by the number of elements written
-    ///         in subsequent calls. If the closure returns a value less than the
-    ///         length of the slice passed to it, it is considered as an interruption
-    ///         of the write operation by that number of elements.
+    ///   elements and an offset, and returns the number of elements written. The
+    ///   closure will not be called if there are no writable elements. If the
+    ///   buffer wraps around, the closure may be called twice. The slice passed
+    ///   to the closure contains the currently writable elements. The offset is
+    ///   `0` for the first call and increases by the number of elements written
+    ///   in subsequent calls. If the closure returns a value less than the
+    ///   length of the slice passed to it, it is considered as an interruption
+    ///   of the write operation by that number of elements.
     /// * `max_size` - An optional parameter specifying the maximum number of elements
-    ///                to write. If `None`, the method will write up to the number of
-    ///                available elements.
+    ///   to write. If `None`, the method will write up to the number of
+    ///   available elements.
     ///
     /// # Returns
     ///
@@ -209,18 +207,18 @@ impl<T> Consumer<T> {
     /// # Arguments
     ///
     /// * `f` - A closure that processes the readable elements. It takes a reference
-    ///         to a slice of readable elements and an offset as arguments, and
-    ///         returns the number of elements read. The closure will not be called if
-    ///         there are no readable elements. If the buffer wraps around, the closure
-    ///         may be called twice. The slice passed to the closure contains the
-    ///         currently accessible elements. The offset is `0` for the first call
-    ///         and increases by the number of elements read in subsequent calls. If
-    ///         the closure returns a value less than the length of the slice passed to
-    ///         it, it is considered as an interruption of the read operation by that
-    ///         number of elements.
+    ///   to a slice of readable elements and an offset as arguments, and
+    ///   returns the number of elements read. The closure will not be called if
+    ///   there are no readable elements. If the buffer wraps around, the closure
+    ///   may be called twice. The slice passed to the closure contains the
+    ///   currently accessible elements. The offset is `0` for the first call
+    ///   and increases by the number of elements read in subsequent calls. If
+    ///   the closure returns a value less than the length of the slice passed to
+    ///   it, it is considered as an interruption of the read operation by that
+    ///   number of elements.
     /// * `max_size` - An optional parameter specifying the maximum number of elements
-    ///                to read. If `None`, the method will read up to the number of
-    ///                available elements.
+    ///   to read. If `None`, the method will read up to the number of
+    ///   available elements.
     ///
     /// # Returns
     ///
@@ -331,7 +329,9 @@ impl<T> Consumer<T> {
 unsafe impl<T> Send for Consumer<T> {}
 
 struct DirectRingBuffer<T> {
-    elements: UnsafeCell<Box<[T]>>,
+    raw: *mut [T],
+    buf: NonNull<T>,
+    size: usize,
     used: AtomicUsize,
 }
 
@@ -345,20 +345,19 @@ impl<T> DirectRingBuffer<T> {
     /// Returns the number of elements available for writing.
     #[inline]
     fn available_write(&self) -> usize {
-        self.elements().len() - self.used.load(Ordering::Acquire)
+        self.size - self.used.load(Ordering::Acquire)
     }
 
-    /// Returns a mutable reference to the elements the buffer.
+    /// Returns a pointer to the buffer at the specified offset.
     #[inline]
-    #[allow(clippy::mut_from_ref)]
-    fn elements(&self) -> &mut Box<[T]> {
-        unsafe { &mut *self.elements.get() }
+    fn ptr_at(&self, count: usize) -> *mut T {
+        unsafe { self.buf.as_ptr().add(count) }
     }
 
     /// Updates the index to wrap around the buffer.
     #[inline]
     fn wraparound_index(&self, index: &mut usize, advance: usize) {
-        *index = if *index + advance >= self.elements().len() {
+        *index = if *index + advance >= self.size {
             0
         } else {
             *index + advance
@@ -370,7 +369,7 @@ impl<T> DirectRingBuffer<T> {
         if self.available_read() == 0 {
             None
         } else {
-            let ret = Some(self.elements()[*index]);
+            let ret = Some(unsafe { self.ptr_at(*index).read() });
             self.wraparound_index(index, 1);
             self.used.fetch_sub(1, Ordering::Release);
             ret
@@ -382,7 +381,7 @@ impl<T> DirectRingBuffer<T> {
         if self.available_write() == 0 {
             false
         } else {
-            self.elements()[*index] = value;
+            unsafe { self.ptr_at(*index).write(value) };
             self.wraparound_index(index, 1);
             self.used.fetch_add(1, Ordering::Release);
             true
@@ -398,16 +397,14 @@ impl<T> DirectRingBuffer<T> {
         max_size: Option<usize>,
         update_used: impl FnOnce(&AtomicUsize, usize),
     ) -> usize {
-        let elements = self.elements();
-        let elements_len = elements.len();
         let mut total_processed = 0;
         let max_size = max_size.unwrap_or(available).min(available);
 
         while total_processed < max_size {
             let part_start = *index;
-            let part_len = (elements_len - part_start).min(max_size - total_processed);
+            let part_len = (self.size - part_start).min(max_size - total_processed);
             let processed = f(
-                unsafe { elements.get_unchecked_mut(part_start) },
+                self.ptr_at(part_start),
                 part_len,
                 total_processed,
             );
@@ -421,6 +418,14 @@ impl<T> DirectRingBuffer<T> {
         }
         update_used(&self.used, total_processed);
         total_processed
+    }
+}
+
+impl<T> Drop for DirectRingBuffer<T> {
+    fn drop(&mut self) {
+        unsafe {
+            drop(Box::from_raw(self.raw));
+        }
     }
 }
 
@@ -451,14 +456,16 @@ impl<T> DirectRingBuffer<T> {
 /// }, None);
 /// assert_eq!(read_data, vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
 /// ```
-#[allow(clippy::uninit_vec)]
-pub fn create_ring_buffer<T: Copy>(size: usize) -> (Producer<T>, Consumer<T>) {
+pub fn create_ring_buffer<T: Default>(size: usize) -> (Producer<T>, Consumer<T>) {
+    let raw = {
+        let mut vec = Vec::<T>::with_capacity(size);
+        vec.resize_with(size, T::default);
+        Box::into_raw(vec.into_boxed_slice())
+    };
     let buffer = Arc::new(DirectRingBuffer {
-        elements: UnsafeCell::new({
-            let mut vec = Vec::<T>::with_capacity(size);
-            unsafe { vec.set_len(size) };
-            vec.into_boxed_slice()
-        }),
+        raw,
+        buf: unsafe { NonNull::new_unchecked(raw as *mut T) },
+        size,
         used: AtomicUsize::new(0),
     });
     (
