@@ -1,10 +1,12 @@
 #![doc = include_str!("../README.md")]
 
 use std::{
-    ptr::NonNull, slice::{from_raw_parts, from_raw_parts_mut}, sync::{
+    ptr::NonNull,
+    slice::{from_raw_parts, from_raw_parts_mut},
+    sync::{
         atomic::{AtomicUsize, Ordering},
         Arc,
-    }
+    },
 };
 
 /// Producer part of the ring buffer.
@@ -286,14 +288,10 @@ impl<T> Consumer<T> {
     ///
     /// The number of elements read.
     #[deprecated(note = "Please use `read_slices` instead")]
-    pub fn read(
-        &mut self,
-        f: impl FnMut(&[T], usize) -> usize,
-        max_size: Option<usize>,
-    ) -> usize {
+    pub fn read(&mut self, f: impl FnMut(&[T], usize) -> usize, max_size: Option<usize>) -> usize {
         self.read_slices(f, max_size)
-    } 
-   
+    }
+
     /// Reads a single element from the ring buffer.
     ///
     /// This method reads a single element from the ring buffer and returns it. If the
@@ -321,7 +319,10 @@ impl<T> Consumer<T> {
     /// assert_eq!(consumer.read_element(), Some(7));
     /// assert_eq!(consumer.read_element(), None);
     /// ```
-    pub fn read_element(&mut self) -> Option<T> where T: Copy {
+    pub fn read_element(&mut self) -> Option<T>
+    where
+        T: Copy,
+    {
         self.buffer.read_element(&mut self.index)
     }
 }
@@ -365,7 +366,10 @@ impl<T> DirectRingBuffer<T> {
     }
 
     /// Reads a single element from the buffer.
-    fn read_element(&self, index: &mut usize) -> Option<T> where T: Copy {
+    fn read_element(&self, index: &mut usize) -> Option<T>
+    where
+        T: Copy,
+    {
         if self.available_read() == 0 {
             None
         } else {
@@ -403,11 +407,7 @@ impl<T> DirectRingBuffer<T> {
         while total_processed < max_size {
             let part_start = *index;
             let part_len = (self.size - part_start).min(max_size - total_processed);
-            let processed = f(
-                self.ptr_at(part_start),
-                part_len,
-                total_processed,
-            );
+            let processed = f(self.ptr_at(part_start), part_len, total_processed);
             total_processed += processed;
             self.wraparound_index(index, processed);
             if processed < part_len {

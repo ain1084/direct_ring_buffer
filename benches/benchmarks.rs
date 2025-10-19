@@ -1,6 +1,6 @@
-use criterion::{criterion_group, criterion_main, Criterion, BatchSize, Throughput};
-use std::hint::black_box;
+use criterion::{criterion_group, criterion_main, BatchSize, Criterion, Throughput};
 use direct_ring_buffer::create_ring_buffer;
+use std::hint::black_box;
 
 fn bench_write<T: Copy + Default + 'static>(c: &mut Criterion) {
     const N: usize = 1_000_000;
@@ -22,7 +22,6 @@ fn bench_write<T: Copy + Default + 'static>(c: &mut Criterion) {
 
     g.finish();
 }
-
 
 fn bench_read<T: Copy + Default + 'static>(c: &mut Criterion) {
     const N: usize = 1_000_000;
